@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import bcrypt from 'bcryptjs';
 
 export interface TeacherAuthResponse {
   success: boolean;
@@ -116,7 +117,7 @@ async function validateTeacherCredentialsWithSchool(loginId: string, password: s
   error?: string;
 }> {
   try {
-    // Single query to get teacher with school information
+    // First, get teacher data by login_id only (not password)
     const { data: teacherData, error } = await supabase
       .from('teachers')
       .select(`
@@ -131,13 +132,12 @@ async function validateTeacherCredentialsWithSchool(loginId: string, password: s
         )
       `)
       .eq('login_id', loginId)
-      .eq('password', password)
       .limit(1)
       .single();
 
     if (error) {
       if (error.code === 'PGRST116') {
-        // No rows returned - invalid credentials
+        // No rows returned - invalid login ID
         return {
           success: false,
           error: 'Invalid login credentials. Please check your login ID and password.'
@@ -151,6 +151,15 @@ async function validateTeacherCredentialsWithSchool(loginId: string, password: s
     }
 
     if (!teacherData) {
+      return {
+        success: false,
+        error: 'Invalid login credentials. Please check your login ID and password.'
+      };
+    }
+
+    // Verify password using bcrypt
+    const isPasswordValid = await bcrypt.compare(password, teacherData.password);
+    if (!isPasswordValid) {
       return {
         success: false,
         error: 'Invalid login credentials. Please check your login ID and password.'
